@@ -1,0 +1,55 @@
+version: "3.8"
+
+services:
+  traefik:
+    image: traefik:v2.11
+    container_name: traefik
+    restart: always
+    command:
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # no entrypoints or certresolver flags here
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./acme.json:/acme.json"
+      - "./traefik.yml:/traefik.yml"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik.rule=Host(`traefik.op.justuju.in`)"
+      - "traefik.http.routers.traefik.entrypoints=websecure"
+      - "traefik.http.routers.traefik.tls=true"
+      - "traefik.http.routers.traefik.tls.certresolver=myresolver"
+      - "traefik.http.routers.traefik.service=api@internal"
+      - "traefik.http.routers.traefik.middlewares=dashboard-auth"
+      - "traefik.http.middlewares.dashboard-auth.basicauth.users=admin:$$2y$$05$$Y4iQp.0Pz4jbcFMHJ8Zkqeo/DuZY.ljknTJqvvYyVf8hOtQHDtBeW"
+    networks:
+      - traefik
+
+  openproject:
+    image: openproject/openproject:16
+    container_name: openproject
+    restart: always
+    environment:
+      - OPENPROJECT_HOST__NAME=openproject.justuju.in
+      - OPENPROJECT_SECRET_KEY_BASE=secret
+    volumes:
+      - ./pgdata:/var/openproject/pgdata
+      - ./assets:/var/openproject/assets
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.openproject.rule=Host(`openproject.justuju.in`)"
+      - "traefik.http.routers.openproject.entrypoints=websecure"
+      - "traefik.http.routers.openproject.tls=true"
+      - "traefik.http.routers.openproject.tls.certresolver=myresolver"
+      - "traefik.http.services.openproject.loadbalancer.server.port=80"
+    networks:
+      - traefik
+
+networks:
+  traefik:
+    driver: bridge
